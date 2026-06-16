@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export type VerifyAdminAccessResult = {
   isAdmin: boolean;
   userId: string;
-  role: "admin" | "super_admin" | null;
+  role: string | null;
   sources?: {
     databaseRoles: string[];
     jwtRole: string | null;
