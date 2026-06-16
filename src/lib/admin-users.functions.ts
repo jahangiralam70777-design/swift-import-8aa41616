@@ -328,8 +328,8 @@ export const adminListUsers = createServerFn({ method: "POST" })
       const auth = emailMap.get(p.id);
       const fallback = auth?.email ?? `${p.id.slice(0, 8)}…`;
       const roles = rolesMap.get(p.id) ?? [];
-      // Default-student: surface "student" so the UI badge is never blank.
-      const effectiveRoles = roles.length > 0 ? roles : ["student"];
+      const authRoles = auth?.roles ?? [];
+      const effectiveRoles = roles.length > 0 ? roles : authRoles;
       return {
         ...p,
         display_name: p.display_name ?? fallback,
