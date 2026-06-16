@@ -354,9 +354,9 @@ function ProfilePanel() {
             </Field>
             <Field label="Role" hint="managed by system">
               <Input
-                value={user?.role ?? "admin"}
+                value={user?.role ? getRoleDisplayName(user.role) : ""}
                 disabled
-                className="h-10 rounded-xl border-white/10 bg-background/40 capitalize"
+                className="h-10 rounded-xl border-white/10 bg-background/40"
               />
             </Field>
           </div>
