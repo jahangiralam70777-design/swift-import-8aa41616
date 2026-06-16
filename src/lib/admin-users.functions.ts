@@ -562,6 +562,8 @@ export const adminSetUserRole = createServerFn({ method: "POST" })
         .eq("role", data.role);
       if (error) throw error;
     }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await syncAuthRoleMetadata(supabaseAdmin, data.id);
     return { ok: true };
   });
 
