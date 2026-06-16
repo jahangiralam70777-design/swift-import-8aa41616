@@ -157,6 +157,41 @@ const LEVEL_TONE: Record<string, string> = {
     "bg-amber-500/10 text-amber-600 dark:text-amber-300 ring-1 ring-inset ring-amber-400/25",
 };
 
+// Canonical role chip styling. Keys are the raw role values stored in
+// public.user_roles — never display these directly; always render via
+// getRoleDisplayName(role) so "super_admin" shows as "Super Admin", etc.
+const ROLE_TONE: Record<string, { chip: string; dot: string }> = {
+  super_admin: {
+    chip: "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-400/25",
+    dot: "bg-amber-500",
+  },
+  admin: {
+    chip: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-400/25",
+    dot: "bg-indigo-500",
+  },
+  moderator: {
+    chip: "bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-1 ring-inset ring-sky-400/25",
+    dot: "bg-sky-500",
+  },
+  student: {
+    chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-400/25",
+    dot: "bg-emerald-500",
+  },
+  user: {
+    chip: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-400/25",
+    dot: "bg-zinc-500",
+  },
+};
+
+const ROLE_RANK = ["super_admin", "admin", "moderator", "student", "user"];
+function sortRolesByRank(roles: string[]): string[] {
+  return [...roles].sort((a, b) => {
+    const ai = ROLE_RANK.indexOf(a);
+    const bi = ROLE_RANK.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+}
+
 function fmtDuration(seconds: number) {
   if (!seconds || seconds < 0) return "—";
   const h = Math.floor(seconds / 3600);
