@@ -513,7 +513,7 @@ function AdminUsersListPage() {
                         {primaryRole ? (
                           <RoleBadge role={primaryRole} />
                         ) : (
-                          <RoleBadge role="student" />
+                          <RoleBadge role="unassigned" />
                         )}
                         {extraRoles.length > 0 && (
                           <span className="inline-flex items-center justify-center h-[22px] min-w-[22px] px-1.5 rounded-full text-[10px] font-bold bg-secondary/80 text-muted-foreground border border-border/50 tabular-nums">
@@ -854,10 +854,19 @@ const ROLE_STYLES: Record<string, RoleStyle> = {
     dot: "bg-slate-500",
     short: "Student",
   },
+  unassigned: {
+    cls: "bg-zinc-500/[0.07] text-zinc-700 dark:text-zinc-300 border-zinc-500/18",
+    dot: "bg-zinc-500",
+    short: "Unassigned",
+  },
 };
 
 function RoleBadge({ role }: { role: string }) {
-  const style = ROLE_STYLES[role] ?? ROLE_STYLES.student;
+  const style = ROLE_STYLES[role] ?? {
+    cls: "bg-zinc-500/[0.07] text-zinc-700 dark:text-zinc-300 border-zinc-500/18",
+    dot: "bg-zinc-500",
+    short: getRoleDisplayName(role),
+  };
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-[5px] rounded-full text-[11px] font-semibold tracking-tight border whitespace-nowrap ${style.cls}`}
