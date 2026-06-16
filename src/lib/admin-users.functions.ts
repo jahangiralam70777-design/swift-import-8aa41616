@@ -118,7 +118,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
 
     // 1) Search (email/uuid resolves through auth.users).
     const searchTerm = (data.search ?? "").trim();
-    let allAuthUsers: Array<{ id: string; email: string | null; verified: boolean }> | null = null;
+    let allAuthUsers: Array<{ id: string; email: string | null; verified: boolean; roles: string[] }> | null = null;
     const loadAllAuthUsers = async () => {
       if (allAuthUsers) return allAuthUsers;
       try {
@@ -156,7 +156,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
       const role = data.role;
       if (role === "student") {
         // Deny anyone with an elevated role.
-        const { data: elevated } = await sb
+        const { data: elevated } = await supabaseAdmin
           .from("user_roles")
           .select("user_id")
           .in("role", ELEVATED_ROLES as unknown as string[]);
@@ -165,7 +165,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
       } else {
         const targetRoles =
           role === "admin" ? (ADMIN_ROLES as readonly string[]) : [role];
-        const { data: matches } = await sb
+        const { data: matches } = await supabaseAdmin
           .from("user_roles")
           .select("user_id")
           .in("role", targetRoles as unknown as string[]);
@@ -266,16 +266,16 @@ export const adminListUsers = createServerFn({ method: "POST" })
     const rolesMap = new Map<string, string[]>();
     const roleDisplayMap = new Map<string, string[]>();
     if (ids.length) {
-      const { data: rs } = await sb
+      const { data: rs } = await supabaseAdmin
         .from("user_roles")
-        .select("user_id,role,display_name")
+        .select("user_id,role")
         .in("user_id", ids);
       for (const r of rs ?? []) {
         const arr = rolesMap.get(r.user_id) ?? [];
         arr.push(r.role);
         rolesMap.set(r.user_id, arr);
         const dArr = roleDisplayMap.get(r.user_id) ?? [];
-        dArr.push(r.display_name ?? r.role);
+        dArr.push(r.role);
         roleDisplayMap.set(r.user_id, dArr);
       }
     }
