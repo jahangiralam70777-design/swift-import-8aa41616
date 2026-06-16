@@ -37,7 +37,6 @@ export const adminDashboardSnapshot = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<AdminDashboardSnapshot> => {
     await assertPermission(context.supabase, context.userId, "view_analytics");
     const sb = context.supabase;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const [
