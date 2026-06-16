@@ -44,7 +44,7 @@ async function syncAuthRoleMetadata(supabaseAdmin: any, userId: string) {
     .select("role")
     .eq("user_id", userId);
   if (error) throw error;
-  const roles = [...new Set((roleRows ?? []).map((r: { role: string }) => r.role))];
+  const roles: string[] = [...new Set<string>((roleRows ?? []).map((r: { role: string }) => r.role))];
   const rank = ["super_admin", "admin", "moderator", "student", "user"];
   const primary = [...roles].sort((a, b) => {
     const ai = rank.indexOf(a);
