@@ -1,3 +1,4 @@
+import { getRoleDisplayName } from "@/lib/role-display";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Premium User Command Drawer — Phase 2 enterprise upgrade.
 // Self-contained: opens via `userId` prop, renders Sheet-style drawer
