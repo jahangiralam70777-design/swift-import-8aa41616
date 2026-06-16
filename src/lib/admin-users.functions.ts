@@ -24,7 +24,6 @@ const listInput = z.object({
 
 // Roles that classify a user as an administrator (used by stats + filters)
 const ADMIN_ROLES = ["admin", "super_admin"] as const;
-const ELEVATED_ROLES = ["admin", "super_admin", "moderator"] as const;
 
 function rolesFromAuthMetadata(appMetadata: unknown): string[] {
   const meta = (appMetadata ?? {}) as Record<string, unknown>;
@@ -114,7 +113,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
     // were applied AFTER `.range()`, which caused "15 verified, 4 visible".
     // -----------------------------------------------------------------------
     const idFilters: Array<Set<string>> = [];
-    const idDenylists: Array<Set<string>> = [];
+    
 
     // 1) Search (email/uuid resolves through auth.users).
     const searchTerm = (data.search ?? "").trim();
@@ -180,17 +179,6 @@ export const adminListUsers = createServerFn({ method: "POST" })
       }
       allowedIds = [...intersection];
     }
-    if (idDenylists.length > 0) {
-      const deny = new Set<string>();
-      for (const d of idDenylists) for (const id of d) deny.add(id);
-      if (allowedIds === null) {
-        // No positive allowlist — we'll express this as NOT IN below.
-        allowedIds = null;
-        // Track to apply not.in later via separate query path.
-      } else {
-        allowedIds = allowedIds.filter((id) => !deny.has(id));
-      }
-    }
 
     // Empty allowlist → return empty page early.
     if (allowedIds !== null && allowedIds.length === 0) {
@@ -222,15 +210,6 @@ export const adminListUsers = createServerFn({ method: "POST" })
     if (allowedIds !== null) {
       // Postgres `in` accepts up to ~1000 ids comfortably; we cap at 10k auth users.
       q = q.in("id", allowedIds);
-    } else if (idDenylists.length > 0) {
-      const denyAll = new Set<string>();
-      for (const d of idDenylists) for (const id of d) denyAll.add(id);
-      if (denyAll.size > 0) {
-        // Supabase JS doesn't support `not in (uuid[])` natively in a clean form,
-        // so we use a comma-joined `not.in` filter.
-        const list = `(${[...denyAll].join(",")})`;
-        q = q.not("id", "in", list);
-      }
     }
 
     if (searchTerm && allowedIds === null) {
