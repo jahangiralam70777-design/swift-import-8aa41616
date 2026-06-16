@@ -150,30 +150,16 @@ export const adminListUsers = createServerFn({ method: "POST" })
 
     // 2) Role filter (server-side via user_roles).
     //    - "admin" includes super_admin (matches the Administrators summary card)
-    //    - "student" includes users with explicit student/user role AND users
-    //      with no elevated role at all (default-student semantics).
+    //    - every other filter matches explicit role rows only — no inferred roles.
     if (data.role) {
       const role = data.role;
-      if (role === "student") {
-        // Deny anyone with an elevated role.
-        const { data: elevated } = await supabaseAdmin
-          .from("user_roles")
-          .select("user_id")
-          .in("role", ELEVATED_ROLES as unknown as string[]);
-        const denyIds = new Set<string>((elevated ?? []).map((r: { user_id: string }) => r.user_id));
-        idDenylists.push(denyIds);
-      } else {
-        const targetRoles =
-          role === "admin" ? (ADMIN_ROLES as readonly string[]) : [role];
-        const { data: matches } = await supabaseAdmin
-          .from("user_roles")
-          .select("user_id")
-          .in("role", targetRoles as unknown as string[]);
-        const matchIds = new Set<string>(
-          (matches ?? []).map((r: { user_id: string }) => r.user_id),
-        );
-        idFilters.push(matchIds);
-      }
+      const targetRoles = role === "admin" ? (ADMIN_ROLES as readonly string[]) : [role];
+      const { data: matches } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id")
+        .in("role", targetRoles as unknown as string[]);
+      const matchIds = new Set<string>((matches ?? []).map((r: { user_id: string }) => r.user_id));
+      idFilters.push(matchIds);
     }
 
     // 3) Verified filter (server-side via auth.users).
@@ -237,7 +223,6 @@ export const adminListUsers = createServerFn({ method: "POST" })
       // Postgres `in` accepts up to ~1000 ids comfortably; we cap at 10k auth users.
       q = q.in("id", allowedIds);
     } else if (idDenylists.length > 0) {
-      // Default-student case with no other positive id filter: exclude elevated users.
       const denyAll = new Set<string>();
       for (const d of idDenylists) for (const id of d) denyAll.add(id);
       if (denyAll.size > 0) {
