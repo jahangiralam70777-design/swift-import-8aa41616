@@ -6,6 +6,14 @@ export const ROLE_DISPLAY_NAMES: Record<string, string> = {
   super_admin: "Super Admin",
 };
 
-export function getRoleDisplayName(role: string): string {
-  return ROLE_DISPLAY_NAMES[role] ?? role;
+export function getRoleDisplayName(role: string | null | undefined): string {
+  if (!role) return "Unassigned";
+  return (
+    ROLE_DISPLAY_NAMES[role] ??
+    role
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ")
+  );
 }

@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export type VerifyAdminAccessResult = {
   isAdmin: boolean;
   userId: string;
-  role: "admin" | "super_admin" | null;
+  role: string | null;
   sources?: {
     databaseRoles: string[];
     jwtRole: string | null;
@@ -20,6 +20,16 @@ function pickAdminRole(roles: string[]): "admin" | "super_admin" | null {
   if (roles.includes("super_admin")) return "super_admin";
   if (roles.includes("admin")) return "admin";
   return null;
+}
+
+function pickPrimaryRole(roles: string[]): string | null {
+  const rank = ["super_admin", "admin", "moderator", "student", "user"];
+  if (roles.length === 0) return null;
+  return [...new Set(roles)].sort((a, b) => {
+    const ai = rank.indexOf(a);
+    const bi = rank.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  })[0];
 }
 
 /**
@@ -101,17 +111,13 @@ export const syncCurrentUserRoleMetadata = createServerFn({ method: "POST" })
       .eq("user_id", userId);
     if (roleError) throw roleError;
     const databaseRoles = (roleRows ?? []).map((r: { role: string }) => r.role);
-    const role = pickAdminRole(databaseRoles);
+    const role = pickPrimaryRole(databaseRoles);
     const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
     if (userError) throw userError;
     const current = (authUser.user?.app_metadata ?? {}) as Record<string, unknown>;
-    const currentRoles = Array.isArray(current.roles)
-      ? current.roles.filter((r): r is string => typeof r === "string")
-      : [];
-    const nonAdminRoles = currentRoles.filter((r) => r !== "admin" && r !== "super_admin");
-    const nextMetadata = role
-      ? { ...current, role, roles: Array.from(new Set([...nonAdminRoles, role])) }
-      : { ...current, role: "student", roles: nonAdminRoles };
+    const nextMetadata = { ...current, roles: Array.from(new Set(databaseRoles)) } as Record<string, unknown>;
+    if (role) nextMetadata.role = role;
+    else delete nextMetadata.role;
     const changed = JSON.stringify(current) !== JSON.stringify(nextMetadata);
     if (changed) {
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {

@@ -166,24 +166,21 @@ export const adminRoleBreakdown = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertPermission(context.supabase, context.userId, "manage_users");
-    const { data, error } = await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
       .from("user_roles")
-      .select("user_id,role,display_name")
+      .select("user_id,role")
       .limit(10_000);
     if (error) throw error;
     const counts = new Map<string, Set<string>>();
-    const displayNames = new Map<string, string>();
-    for (const r of (data ?? []) as Array<{ user_id: string; role: string; display_name: string | null }>) {
+    for (const r of (data ?? []) as Array<{ user_id: string; role: string }>) {
       const s = counts.get(r.role) ?? new Set<string>();
       s.add(r.user_id);
       counts.set(r.role, s);
-      if (r.display_name && !displayNames.has(r.role)) {
-        displayNames.set(r.role, r.display_name);
-      }
     }
     const out = [...counts.entries()].map(([role, s]) => ({
       role,
-      display_name: displayNames.get(role) ?? role,
+      display_name: role,
       count: s.size,
     }));
     out.sort((a, b) => b.count - a.count);

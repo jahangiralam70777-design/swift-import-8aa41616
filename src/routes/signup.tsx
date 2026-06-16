@@ -88,7 +88,8 @@ function StudentSignup() {
         referralSource: referral,
       });
       if (result?.session?.user) {
-        // Optimistic user so UI updates immediately on /dashboard.
+        // Optimistic user so UI updates immediately on /dashboard. This is
+        // only for public signup, where the backend creates a student role.
         syncAuthSession(result.session, {
           id: result.session.user.id,
           name: name.trim() || email.split("@")[0] || "Learner",

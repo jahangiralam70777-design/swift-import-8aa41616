@@ -319,7 +319,7 @@ function ProfileCard({ profile, userEmail }: { profile: any; userEmail: string }
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-2xl font-bold">{displayName}</h2>
             <span className="rounded-full border border-[var(--neon-purple)]/40 bg-[var(--neon-purple)]/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-fuchsia-300">
-              {profile?.level ?? "Student"}
+              {profile?.level ?? "—"}
             </span>
             <StatusPill status={status} />
           </div>

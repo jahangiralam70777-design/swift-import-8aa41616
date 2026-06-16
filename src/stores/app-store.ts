@@ -98,13 +98,28 @@ function persistAuthSnapshot(user: UserSession) {
   }
 }
 
+function roleFromSessionMetadata(session: Session): AppRole {
+  const appMetadata = (session.user.app_metadata ?? {}) as Record<string, unknown>;
+  const role = typeof appMetadata.role === "string" ? appMetadata.role : null;
+  const roles = Array.isArray(appMetadata.roles) ? appMetadata.roles : [];
+  const allRoles = [role, ...roles].filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  const rank = ["super_admin", "admin", "moderator", "student", "user"];
+  return [...new Set(allRoles)].sort((a, b) => {
+    const ai = rank.indexOf(a);
+    const bi = rank.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  })[0] ?? null;
+}
+
 function toAuthUser(session: Session): NonNullable<UserSession> {
   const email = session.user.email ?? "";
   return {
     id: session.user.id,
     name: (session.user.user_metadata?.display_name as string) ?? email.split("@")[0] ?? "Learner",
     email,
-    role: "student",
+    role: roleFromSessionMetadata(session),
   };
 }
 

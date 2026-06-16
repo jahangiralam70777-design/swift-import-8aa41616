@@ -70,13 +70,20 @@ export type AuthUser = {
   role: AppRole;
 };
 
-function roleFromAppMetadata(appMetadata: Record<string, unknown> | undefined): AppRole | null {
+function rolesFromAppMetadata(appMetadata: Record<string, unknown> | undefined): string[] {
   const role = typeof appMetadata?.role === "string" ? appMetadata.role : null;
   const roles = Array.isArray(appMetadata?.roles) ? appMetadata.roles : [];
-  if (role === "super_admin" || roles.includes("super_admin")) return "super_admin";
-  if (role === "admin" || roles.includes("admin")) return "admin";
-  if (role === "moderator" || roles.includes("moderator")) return "moderator";
-  return null;
+  return [role, ...roles].filter((r): r is string => typeof r === "string" && r.trim().length > 0);
+}
+
+function pickPrimaryRole(roles: string[]): AppRole {
+  const rank = ["super_admin", "admin", "moderator", "student", "user"];
+  if (roles.length === 0) return null;
+  return [...new Set(roles)].sort((a, b) => {
+    const ai = rank.indexOf(a);
+    const bi = rank.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  })[0];
 }
 
 // H-3: readLocalAuthSnapshot was previously used as a role fallback when
@@ -122,7 +129,9 @@ export async function signInWithEmail(
   }
 
   // Resolve role from user_roles (admin / super_admin / moderator / student / user)
-  let role: AppRole = roleFromAppMetadata(data.user?.app_metadata as Record<string, unknown>) ?? "student";
+  let role: AppRole = pickPrimaryRole(
+    rolesFromAppMetadata(data.user?.app_metadata as Record<string, unknown>),
+  );
   try {
     const uid = data.user?.id;
     if (uid) {
@@ -131,14 +140,11 @@ export async function signInWithEmail(
         .select("role")
         .eq("user_id", uid);
       const roles = (roleRows ?? []).map((r) => r.role as string);
-      if (roles.includes("super_admin")) role = "super_admin";
-      else if (roles.includes("admin")) role = "admin";
-      else if (roles.includes("moderator")) role = "moderator";
+      role = pickPrimaryRole(roles) ?? role;
     }
   } catch (e) {
-    // Fail-OPEN to "student" if role lookup fails — we then apply the gate,
-    // which itself fails open on RPC errors. Admin accounts retain access via
-    // intent:"admin" on the dedicated admin login page.
+    // Do not invent a role if lookup fails. Admin access is separately
+    // verified server-side, and UI role labels should wait for real data.
     console.warn("[auth] role lookup after sign-in failed", e);
   }
 
@@ -282,10 +288,8 @@ export async function fetchSessionUser(session?: Session | null): Promise<AuthUs
   const userId = resolvedSession.user.id;
   const email = resolvedSession.user.email ?? "";
 
-  // Race profile/role lookups against an 8s timeout so a stalled network
-  // on production never blocks the auth state from settling. If a lookup
-  // times out we still return a usable AuthUser from the verified session,
-  // but the role is downgraded to "student" — see H-3 below.
+  // Race profile/role lookups against a timeout so auth state can settle, but
+  // never replace an unknown role with a made-up default.
   const withTimeout = <T>(p: PromiseLike<T>, ms: number, fallback: T): Promise<T> =>
     new Promise((resolve) => {
       const t = setTimeout(() => {
@@ -341,21 +345,14 @@ export async function fetchSessionUser(session?: Session | null): Promise<AuthUs
     return null;
   }
   if (banRes.data === true) return null;
-  // H-3: NEVER fall back to a localStorage snapshot for role. A tampered
-  // snapshot could otherwise grant admin UI access during a brief
-  // network blip. Fail closed to "student" — admin routes still gate
-  // on a fresh server-verified `verifyAdminAccess()` call (H-4), so a
-  // legitimate admin sees the real role within one round trip.
-  const metadataRole = roleFromAppMetadata(resolvedSession.user.app_metadata as Record<string, unknown>);
+  // H-3: NEVER fall back to localStorage or a hardcoded "student" role. Use
+  // only the role table, with auth metadata as a secondary real auth source.
+  const metadataRoles = rolesFromAppMetadata(
+    resolvedSession.user.app_metadata as Record<string, unknown>,
+  );
   const role: AppRole = Array.isArray(roles)
-    ? roles.some((r) => r.role === "super_admin")
-      ? "super_admin"
-      : roles.some((r) => r.role === "admin")
-        ? "admin"
-        : roles.some((r) => r.role === "moderator")
-          ? "moderator"
-          : (metadataRole ?? "student")
-    : (metadataRole ?? "student");
+    ? (pickPrimaryRole(roles.map((r) => r.role)) ?? pickPrimaryRole(metadataRoles))
+    : pickPrimaryRole(metadataRoles);
 
   return {
     id: userId,

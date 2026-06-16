@@ -24,27 +24,71 @@ const listInput = z.object({
 
 // Roles that classify a user as an administrator (used by stats + filters)
 const ADMIN_ROLES = ["admin", "super_admin"] as const;
-const ELEVATED_ROLES = ["admin", "super_admin", "moderator"] as const;
+
+function rolesFromAuthMetadata(appMetadata: unknown): string[] {
+  const meta = (appMetadata ?? {}) as Record<string, unknown>;
+  const roles = new Set<string>();
+  if (typeof meta.role === "string" && meta.role.trim()) roles.add(meta.role.trim());
+  if (Array.isArray(meta.roles)) {
+    for (const role of meta.roles) {
+      if (typeof role === "string" && role.trim()) roles.add(role.trim());
+    }
+  }
+  return [...roles];
+}
+
+async function syncAuthRoleMetadata(supabaseAdmin: any, userId: string) {
+  const { data: roleRows, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (error) throw error;
+  const roles: string[] = [...new Set<string>((roleRows ?? []).map((r: { role: string }) => r.role))];
+  const rank = ["super_admin", "admin", "moderator", "student", "user"];
+  const primary = [...roles].sort((a, b) => {
+    const ai = rank.indexOf(a);
+    const bi = rank.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  })[0];
+  const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (userError) throw userError;
+  const current = (authUser.user?.app_metadata ?? {}) as Record<string, unknown>;
+  const next = { ...current, roles } as Record<string, unknown>;
+  if (primary) next.role = primary;
+  else delete next.role;
+  const changed = JSON.stringify(current) !== JSON.stringify(next);
+  if (changed) {
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      app_metadata: next,
+    });
+    if (updateError) throw updateError;
+  }
+}
 
 // Page through auth.users to collect ids matching a predicate (verified flag).
 // Caps at 10k users to stay safe; sufficient for this app's scale.
 async function listAuthUsersAll(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseAdmin: any,
-): Promise<Array<{ id: string; email: string | null; verified: boolean }>> {
-  const out: Array<{ id: string; email: string | null; verified: boolean }> = [];
+): Promise<Array<{ id: string; email: string | null; verified: boolean; roles: string[] }>> {
+  const out: Array<{ id: string; email: string | null; verified: boolean; roles: string[] }> = [];
   const perPage = 1000;
   const maxPages = 10;
   for (let page = 1; page <= maxPages; page++) {
     const { data } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
-    const users: Array<{ id: string; email?: string | null; email_confirmed_at?: string | null }> =
-      data?.users ?? [];
+    const users: Array<{
+      id: string;
+      email?: string | null;
+      email_confirmed_at?: string | null;
+      app_metadata?: Record<string, unknown> | null;
+    }> = data?.users ?? [];
     if (!users.length) break;
     for (const u of users) {
       out.push({
         id: u.id,
         email: u.email ?? null,
         verified: !!u.email_confirmed_at,
+        roles: rolesFromAuthMetadata(u.app_metadata),
       });
     }
     if (users.length < perPage) break;
@@ -69,11 +113,11 @@ export const adminListUsers = createServerFn({ method: "POST" })
     // were applied AFTER `.range()`, which caused "15 verified, 4 visible".
     // -----------------------------------------------------------------------
     const idFilters: Array<Set<string>> = [];
-    const idDenylists: Array<Set<string>> = [];
+    
 
     // 1) Search (email/uuid resolves through auth.users).
     const searchTerm = (data.search ?? "").trim();
-    let allAuthUsers: Array<{ id: string; email: string | null; verified: boolean }> | null = null;
+    let allAuthUsers: Array<{ id: string; email: string | null; verified: boolean; roles: string[] }> | null = null;
     const loadAllAuthUsers = async () => {
       if (allAuthUsers) return allAuthUsers;
       try {
@@ -105,30 +149,16 @@ export const adminListUsers = createServerFn({ method: "POST" })
 
     // 2) Role filter (server-side via user_roles).
     //    - "admin" includes super_admin (matches the Administrators summary card)
-    //    - "student" includes users with explicit student/user role AND users
-    //      with no elevated role at all (default-student semantics).
+    //    - every other filter matches explicit role rows only — no inferred roles.
     if (data.role) {
       const role = data.role;
-      if (role === "student") {
-        // Deny anyone with an elevated role.
-        const { data: elevated } = await sb
-          .from("user_roles")
-          .select("user_id")
-          .in("role", ELEVATED_ROLES as unknown as string[]);
-        const denyIds = new Set<string>((elevated ?? []).map((r: { user_id: string }) => r.user_id));
-        idDenylists.push(denyIds);
-      } else {
-        const targetRoles =
-          role === "admin" ? (ADMIN_ROLES as readonly string[]) : [role];
-        const { data: matches } = await sb
-          .from("user_roles")
-          .select("user_id")
-          .in("role", targetRoles as unknown as string[]);
-        const matchIds = new Set<string>(
-          (matches ?? []).map((r: { user_id: string }) => r.user_id),
-        );
-        idFilters.push(matchIds);
-      }
+      const targetRoles = role === "admin" ? (ADMIN_ROLES as readonly string[]) : [role];
+      const { data: matches } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id")
+        .in("role", targetRoles as unknown as string[]);
+      const matchIds = new Set<string>((matches ?? []).map((r: { user_id: string }) => r.user_id));
+      idFilters.push(matchIds);
     }
 
     // 3) Verified filter (server-side via auth.users).
@@ -148,17 +178,6 @@ export const adminListUsers = createServerFn({ method: "POST" })
         intersection = new Set([...intersection].filter((id) => idFilters[i].has(id)));
       }
       allowedIds = [...intersection];
-    }
-    if (idDenylists.length > 0) {
-      const deny = new Set<string>();
-      for (const d of idDenylists) for (const id of d) deny.add(id);
-      if (allowedIds === null) {
-        // No positive allowlist — we'll express this as NOT IN below.
-        allowedIds = null;
-        // Track to apply not.in later via separate query path.
-      } else {
-        allowedIds = allowedIds.filter((id) => !deny.has(id));
-      }
     }
 
     // Empty allowlist → return empty page early.
@@ -191,16 +210,6 @@ export const adminListUsers = createServerFn({ method: "POST" })
     if (allowedIds !== null) {
       // Postgres `in` accepts up to ~1000 ids comfortably; we cap at 10k auth users.
       q = q.in("id", allowedIds);
-    } else if (idDenylists.length > 0) {
-      // Default-student case with no other positive id filter: exclude elevated users.
-      const denyAll = new Set<string>();
-      for (const d of idDenylists) for (const id of d) denyAll.add(id);
-      if (denyAll.size > 0) {
-        // Supabase JS doesn't support `not in (uuid[])` natively in a clean form,
-        // so we use a comma-joined `not.in` filter.
-        const list = `(${[...denyAll].join(",")})`;
-        q = q.not("id", "in", list);
-      }
     }
 
     if (searchTerm && allowedIds === null) {
@@ -221,29 +230,31 @@ export const adminListUsers = createServerFn({ method: "POST" })
     const rolesMap = new Map<string, string[]>();
     const roleDisplayMap = new Map<string, string[]>();
     if (ids.length) {
-      const { data: rs } = await sb
+      const { data: rs } = await supabaseAdmin
         .from("user_roles")
-        .select("user_id,role,display_name")
+        .select("user_id,role")
         .in("user_id", ids);
       for (const r of rs ?? []) {
         const arr = rolesMap.get(r.user_id) ?? [];
         arr.push(r.role);
         rolesMap.set(r.user_id, arr);
         const dArr = roleDisplayMap.get(r.user_id) ?? [];
-        dArr.push(r.display_name ?? r.role);
+        dArr.push(r.role);
         roleDisplayMap.set(r.user_id, dArr);
       }
     }
 
     // Email + verification lookup. Reuse cached auth list when we already paged it.
-    const emailMap = new Map<string, { email: string | null; verified: boolean }>();
+    const emailMap = new Map<string, { email: string | null; verified: boolean; roles: string[] }>();
     if (ids.length) {
-      const cachedAuthUsers: Array<{ id: string; email: string | null; verified: boolean }> =
+      const cachedAuthUsers: Array<{ id: string; email: string | null; verified: boolean; roles: string[] }> =
         allAuthUsers ?? [];
       if (cachedAuthUsers.length > 0) {
         const idSet = new Set(ids);
         for (const u of cachedAuthUsers) {
-          if (idSet.has(u.id)) emailMap.set(u.id, { email: u.email, verified: u.verified });
+          if (idSet.has(u.id)) {
+            emailMap.set(u.id, { email: u.email, verified: u.verified, roles: u.roles });
+          }
         }
       } else {
         try {
@@ -257,6 +268,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
               id: string;
               email?: string | null;
               email_confirmed_at?: string | null;
+              app_metadata?: Record<string, unknown> | null;
             }> = u?.users ?? [];
             if (!users.length) break;
             for (const usr of users) {
@@ -264,6 +276,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
                 emailMap.set(usr.id, {
                   email: usr.email ?? null,
                   verified: !!usr.email_confirmed_at,
+                  roles: rolesFromAuthMetadata(usr.app_metadata),
                 });
               }
             }
@@ -274,7 +287,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
         }
       }
       for (const id of ids) {
-        if (!emailMap.has(id)) emailMap.set(id, { email: null, verified: false });
+        if (!emailMap.has(id)) emailMap.set(id, { email: null, verified: false, roles: [] });
       }
     }
 
@@ -282,8 +295,8 @@ export const adminListUsers = createServerFn({ method: "POST" })
       const auth = emailMap.get(p.id);
       const fallback = auth?.email ?? `${p.id.slice(0, 8)}…`;
       const roles = rolesMap.get(p.id) ?? [];
-      // Default-student: surface "student" so the UI badge is never blank.
-      const effectiveRoles = roles.length > 0 ? roles : ["student"];
+      const authRoles = auth?.roles ?? [];
+      const effectiveRoles = roles.length > 0 ? roles : authRoles;
       return {
         ...p,
         display_name: p.display_name ?? fallback,
@@ -360,7 +373,7 @@ export const adminUserStats = createServerFn({ method: "GET" })
         .is("deleted_at", null),
       // Pull distinct user_ids holding any admin-class role (admin OR super_admin).
       // A single user with both roles must be counted once.
-      sb
+      supabaseAdmin
         .from("user_roles")
         .select("user_id")
         .in("role", ADMIN_ROLES as unknown as string[]),
@@ -414,7 +427,7 @@ export const adminCreateStudent = createServerFn({ method: "POST" })
       // hook_before_user_created Auth Hook lets it through even when the
       // student-signup kill-switch is OFF. Only the service role can set
       // app_metadata — public /auth/v1/signup cannot forge this.
-      app_metadata: { created_by_admin: true },
+      app_metadata: { created_by_admin: true, role: "student", roles: ["student"] },
     });
     if (error) throw error;
     const newId = created.user?.id;
@@ -428,6 +441,10 @@ export const adminCreateStudent = createServerFn({ method: "POST" })
       bio: data.phone ? `Phone: ${data.phone}` : null,
     });
     if (pe) throw pe;
+    const { error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: newId, role: "student" }, { onConflict: "user_id,role" });
+    if (roleError) throw roleError;
     return { ok: true, id: newId };
   });
 
@@ -499,20 +516,21 @@ export const adminSetUserRole = createServerFn({ method: "POST" })
       data.grant ? "admin.user.role_grant" : "admin.user.role_revoke",
       { target_id: data.id, role: data.role },
     );
-    const sb = context.supabase;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.grant) {
-      const { error } = await sb
+      const { error } = await supabaseAdmin
         .from("user_roles")
         .upsert({ user_id: data.id, role: data.role }, { onConflict: "user_id,role" });
       if (error) throw error;
     } else {
-      const { error } = await sb
+      const { error } = await supabaseAdmin
         .from("user_roles")
         .delete()
         .eq("user_id", data.id)
         .eq("role", data.role);
       if (error) throw error;
     }
+    await syncAuthRoleMetadata(supabaseAdmin, data.id);
     return { ok: true };
   });
 
