@@ -155,7 +155,7 @@ function OverviewTab({ user }: { user: UserLite }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <StatCard label="Status" value={user.status} />
-      <StatCard label="Role" value={((user.roles && user.roles.length > 0) ? user.roles : ["student"]).map(getRoleDisplayName).join(", ")} />
+      <StatCard label="Role" value={(user.roles ?? []).map(getRoleDisplayName).join(", ") || "Unassigned"} />
       <StatCard label="Level" value={user.level ?? "—"} />
       <StatCard
         label="Joined"
