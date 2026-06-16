@@ -1,3 +1,4 @@
+import { getRoleDisplayName } from "@/lib/role-display";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -153,7 +154,7 @@ function Topbar() {
         <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-background/40 p-1 pl-3">
           <div className="text-right leading-tight">
             <p className="text-xs font-semibold">{user?.name ?? "Admin"}</p>
-            <p className="text-[10px] text-muted-foreground capitalize">{user?.role ?? "admin"}</p>
+            <p className="text-[10px] text-muted-foreground">{user?.role ? getRoleDisplayName(user.role) : "—"}</p>
           </div>
           <div className="bg-cta-gradient flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white shadow-glow">
             {initials}
@@ -353,9 +354,9 @@ function ProfilePanel() {
             </Field>
             <Field label="Role" hint="managed by system">
               <Input
-                value={user?.role ?? "admin"}
+                value={user?.role ? getRoleDisplayName(user.role) : ""}
                 disabled
-                className="h-10 rounded-xl border-white/10 bg-background/40 capitalize"
+                className="h-10 rounded-xl border-white/10 bg-background/40"
               />
             </Field>
           </div>

@@ -1,3 +1,4 @@
+import { getRoleDisplayName } from "@/lib/role-display";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Premium User Command Drawer — Phase 2 enterprise upgrade.
 // Self-contained: opens via `userId` prop, renders Sheet-style drawer
@@ -154,7 +155,7 @@ function OverviewTab({ user }: { user: UserLite }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <StatCard label="Status" value={user.status} />
-      <StatCard label="Role" value={(user.roles ?? ["student"]).join(", ")} />
+      <StatCard label="Role" value={((user.roles && user.roles.length > 0) ? user.roles : ["student"]).map(getRoleDisplayName).join(", ")} />
       <StatCard label="Level" value={user.level ?? "—"} />
       <StatCard
         label="Joined"
