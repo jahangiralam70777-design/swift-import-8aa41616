@@ -2342,7 +2342,7 @@ function TabPanel(p: TabPanelProps) {
               return (
                 <div key={r.role}>
                   <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="capitalize">{r.role}</span>
+                    <span>{getRoleDisplayName(r.role)}</span>
                     <span className="text-muted-foreground">
                       {r.count} · {pct}%
                     </span>
