@@ -537,21 +537,20 @@ export const adminSetUserRole = createServerFn({ method: "POST" })
       data.grant ? "admin.user.role_grant" : "admin.user.role_revoke",
       { target_id: data.id, role: data.role },
     );
-    const sb = context.supabase;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.grant) {
-      const { error } = await sb
+      const { error } = await supabaseAdmin
         .from("user_roles")
         .upsert({ user_id: data.id, role: data.role }, { onConflict: "user_id,role" });
       if (error) throw error;
     } else {
-      const { error } = await sb
+      const { error } = await supabaseAdmin
         .from("user_roles")
         .delete()
         .eq("user_id", data.id)
         .eq("role", data.role);
       if (error) throw error;
     }
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await syncAuthRoleMetadata(supabaseAdmin, data.id);
     return { ok: true };
   });
