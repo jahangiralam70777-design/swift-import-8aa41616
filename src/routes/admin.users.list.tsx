@@ -72,7 +72,7 @@ import {
 import { UserCommandDrawer } from "@/components/admin/users/UserCommandDrawer";
 
 const statusEnum = z.enum(["active", "suspended", "pending", "deleted"]);
-const roleEnum = z.enum(["admin", "moderator", "student"]);
+const roleEnum = z.enum(["admin", "super_admin", "moderator", "student", "user"]);
 const dateEnum = z.enum(["24h", "7d", "30d", "lifetime"]);
 const sortEnum = z.enum(["recent", "name", "logins", "usage", "lastLogin"]);
 
@@ -366,8 +366,10 @@ function AdminUsersListPage() {
             <SelectContent>
               <SelectItem value="all">All roles</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="super_admin">Super Admin</SelectItem>
               <SelectItem value="moderator">Moderator</SelectItem>
               <SelectItem value="student">Student</SelectItem>
+                <SelectItem value="user">User</SelectItem>
             </SelectContent>
           </Select>
           <Select

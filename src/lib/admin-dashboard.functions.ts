@@ -308,7 +308,10 @@ export const adminControlCenter = createServerFn({ method: "GET" })
       sb.rpc("admin_top_modules", { _range_hours: 168, _limit: 5 }),
       sb.rpc("admin_top_users", { _order: "most", _limit: 5 }),
       sb.from("profiles").select("id", { count: "exact", head: true }).is("deleted_at", null),
-      sb.from("user_roles").select("user_id", { count: "exact", head: true }).eq("role", "admin"),
+      sb
+        .from("user_roles")
+        .select("user_id", { count: "exact", head: true })
+        .in("role", ["admin", "super_admin"]),
       sb.from("module_visibility").select("key,label,hidden"),
       sb.from("exam_attempts").select("kind, chapter_id, completed_at, created_at, user_id"),
       sb.from("exam_attempts").select("kind, user_id, created_at").gte("created_at", dayAgo),

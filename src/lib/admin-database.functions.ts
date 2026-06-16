@@ -96,7 +96,7 @@ export const adminGetDatabaseStats = createServerFn({ method: "POST" })
       profilesRecent,
     ] = await Promise.all([
       sb.from("profiles").select("id", { count: "exact", head: true }),
-      sb.from("user_roles").select("user_id", { count: "exact" }).eq("role", "admin"),
+      sb.from("user_roles").select("user_id", { count: "exact" }).in("role", ["admin", "super_admin"]),
       sb.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", sevenAgo),
       sb.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", thirtyAgo),
       sb.from("exam_attempts").select("user_id").gte("created_at", sevenAgo).limit(20000),

@@ -9,7 +9,7 @@ export type AdminReferralStats = Awaited<ReturnType<typeof AdminUsers.adminRefer
 
 export interface ListUsersFilters {
   search?: string;
-  role?: "admin" | "moderator" | "student";
+  role?: "admin" | "super_admin" | "moderator" | "student" | "user";
   status?: "active" | "suspended" | "pending" | "deleted";
   level?: string;
   referralSource?: string;
