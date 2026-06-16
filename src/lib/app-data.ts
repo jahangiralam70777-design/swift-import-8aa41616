@@ -25,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type AppRole = "student" | "admin" | "super_admin" | "moderator";
+export type AppRole = string | null;
 
 export type NavItem = {
   title: string;
