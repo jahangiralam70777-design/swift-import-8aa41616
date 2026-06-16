@@ -37,6 +37,7 @@ export const adminDashboardSnapshot = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<AdminDashboardSnapshot> => {
     await assertPermission(context.supabase, context.userId, "view_analytics");
     const sb = context.supabase;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const [
@@ -308,7 +309,7 @@ export const adminControlCenter = createServerFn({ method: "GET" })
       sb.rpc("admin_top_modules", { _range_hours: 168, _limit: 5 }),
       sb.rpc("admin_top_users", { _order: "most", _limit: 5 }),
       sb.from("profiles").select("id", { count: "exact", head: true }).is("deleted_at", null),
-      sb
+      supabaseAdmin
         .from("user_roles")
         .select("user_id", { count: "exact", head: true })
         .in("role", ["admin", "super_admin"]),
