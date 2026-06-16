@@ -288,10 +288,8 @@ export async function fetchSessionUser(session?: Session | null): Promise<AuthUs
   const userId = resolvedSession.user.id;
   const email = resolvedSession.user.email ?? "";
 
-  // Race profile/role lookups against an 8s timeout so a stalled network
-  // on production never blocks the auth state from settling. If a lookup
-  // times out we still return a usable AuthUser from the verified session,
-  // but the role is downgraded to "student" — see H-3 below.
+  // Race profile/role lookups against a timeout so auth state can settle, but
+  // never replace an unknown role with a made-up default.
   const withTimeout = <T>(p: PromiseLike<T>, ms: number, fallback: T): Promise<T> =>
     new Promise((resolve) => {
       const t = setTimeout(() => {
@@ -347,21 +345,14 @@ export async function fetchSessionUser(session?: Session | null): Promise<AuthUs
     return null;
   }
   if (banRes.data === true) return null;
-  // H-3: NEVER fall back to a localStorage snapshot for role. A tampered
-  // snapshot could otherwise grant admin UI access during a brief
-  // network blip. Fail closed to "student" — admin routes still gate
-  // on a fresh server-verified `verifyAdminAccess()` call (H-4), so a
-  // legitimate admin sees the real role within one round trip.
-  const metadataRole = roleFromAppMetadata(resolvedSession.user.app_metadata as Record<string, unknown>);
+  // H-3: NEVER fall back to localStorage or a hardcoded "student" role. Use
+  // only the role table, with auth metadata as a secondary real auth source.
+  const metadataRoles = rolesFromAppMetadata(
+    resolvedSession.user.app_metadata as Record<string, unknown>,
+  );
   const role: AppRole = Array.isArray(roles)
-    ? roles.some((r) => r.role === "super_admin")
-      ? "super_admin"
-      : roles.some((r) => r.role === "admin")
-        ? "admin"
-        : roles.some((r) => r.role === "moderator")
-          ? "moderator"
-          : (metadataRole ?? "student")
-    : (metadataRole ?? "student");
+    ? (pickPrimaryRole(roles.map((r) => r.role)) ?? pickPrimaryRole(metadataRoles))
+    : pickPrimaryRole(metadataRoles);
 
   return {
     id: userId,
