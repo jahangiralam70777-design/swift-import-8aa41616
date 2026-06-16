@@ -70,13 +70,20 @@ export type AuthUser = {
   role: AppRole;
 };
 
-function roleFromAppMetadata(appMetadata: Record<string, unknown> | undefined): AppRole | null {
+function rolesFromAppMetadata(appMetadata: Record<string, unknown> | undefined): string[] {
   const role = typeof appMetadata?.role === "string" ? appMetadata.role : null;
   const roles = Array.isArray(appMetadata?.roles) ? appMetadata.roles : [];
-  if (role === "super_admin" || roles.includes("super_admin")) return "super_admin";
-  if (role === "admin" || roles.includes("admin")) return "admin";
-  if (role === "moderator" || roles.includes("moderator")) return "moderator";
-  return null;
+  return [role, ...roles].filter((r): r is string => typeof r === "string" && r.trim().length > 0);
+}
+
+function pickPrimaryRole(roles: string[]): AppRole {
+  const rank = ["super_admin", "admin", "moderator", "student", "user"];
+  if (roles.length === 0) return null;
+  return [...new Set(roles)].sort((a, b) => {
+    const ai = rank.indexOf(a);
+    const bi = rank.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  })[0];
 }
 
 // H-3: readLocalAuthSnapshot was previously used as a role fallback when
@@ -122,7 +129,9 @@ export async function signInWithEmail(
   }
 
   // Resolve role from user_roles (admin / super_admin / moderator / student / user)
-  let role: AppRole = roleFromAppMetadata(data.user?.app_metadata as Record<string, unknown>) ?? "student";
+  let role: AppRole = pickPrimaryRole(
+    rolesFromAppMetadata(data.user?.app_metadata as Record<string, unknown>),
+  );
   try {
     const uid = data.user?.id;
     if (uid) {
@@ -131,14 +140,11 @@ export async function signInWithEmail(
         .select("role")
         .eq("user_id", uid);
       const roles = (roleRows ?? []).map((r) => r.role as string);
-      if (roles.includes("super_admin")) role = "super_admin";
-      else if (roles.includes("admin")) role = "admin";
-      else if (roles.includes("moderator")) role = "moderator";
+      role = pickPrimaryRole(roles) ?? role;
     }
   } catch (e) {
-    // Fail-OPEN to "student" if role lookup fails — we then apply the gate,
-    // which itself fails open on RPC errors. Admin accounts retain access via
-    // intent:"admin" on the dedicated admin login page.
+    // Do not invent a role if lookup fails. Admin access is separately
+    // verified server-side, and UI role labels should wait for real data.
     console.warn("[auth] role lookup after sign-in failed", e);
   }
 
