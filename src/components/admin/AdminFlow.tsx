@@ -52,6 +52,7 @@ import {
   type AdminNotificationsBadge,
 } from "@/lib/admin-dashboard.functions";
 import { adminGlobalSearch, type SearchHit } from "@/lib/admin-search.functions";
+import { getRoleDisplayName } from "@/lib/role-display";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Command,
