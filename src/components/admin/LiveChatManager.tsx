@@ -359,7 +359,7 @@ export function LiveChatManager() {
                         <span
                           className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ROLE_COLORS[c.user_role] ?? ROLE_COLORS.user}`}
                         >
-                          {c.user_role.replace("_", " ")}
+                          {getRoleDisplayName(c.user_role)}
                         </span>
                       )}
                     </div>
@@ -413,7 +413,7 @@ export function LiveChatManager() {
                     <span
                       className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ROLE_COLORS[conv.user_role] ?? ROLE_COLORS.user}`}
                     >
-                      {conv.user_role.replace("_", " ")}
+                      {getRoleDisplayName(conv.user_role)}
                     </span>
                   )}
                   {conv.user_online && (
@@ -639,7 +639,7 @@ export function LiveChatManager() {
                 <span
                   className={`mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${ROLE_COLORS[profile.role] ?? ROLE_COLORS.user}`}
                 >
-                  {profile.role.replace("_", " ")}
+                  {getRoleDisplayName(profile.role)}
                 </span>
               )}
               <dl className="mt-3 space-y-1 text-xs">
@@ -727,7 +727,7 @@ export function LiveChatManager() {
                   <span
                     className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ROLE_COLORS[assignee.role] ?? ROLE_COLORS.user}`}
                   >
-                    {assignee.role.replace("_", " ")}
+                    {getRoleDisplayName(assignee.role)}
                   </span>
                 </div>
               ) : (
@@ -743,7 +743,7 @@ export function LiveChatManager() {
                   <option value="">— Unassigned —</option>
                   {(staffQ.data ?? []).map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.role.replace("_", " ")})
+                      {s.name} ({getRoleDisplayName(s.role)})
                     </option>
                   ))}
                 </select>
