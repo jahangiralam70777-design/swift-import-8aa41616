@@ -253,7 +253,7 @@ function AdminTopbar({ badge }: { badge?: AdminNotificationsBadge }) {
           </div>
           <div className="leading-tight">
             <p className="text-xs font-semibold">{user?.name ?? "Admin"}</p>
-            <p className="text-[10px] capitalize text-muted-foreground">{user?.role ?? "admin"}</p>
+            <p className="text-[10px] text-muted-foreground">{user?.role ? getRoleDisplayName(user.role) : "—"}</p>
           </div>
         </Link>
       </div>
