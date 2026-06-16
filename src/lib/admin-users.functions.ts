@@ -281,14 +281,16 @@ export const adminListUsers = createServerFn({ method: "POST" })
     }
 
     // Email + verification lookup. Reuse cached auth list when we already paged it.
-    const emailMap = new Map<string, { email: string | null; verified: boolean }>();
+    const emailMap = new Map<string, { email: string | null; verified: boolean; roles: string[] }>();
     if (ids.length) {
       const cachedAuthUsers: Array<{ id: string; email: string | null; verified: boolean; roles: string[] }> =
         allAuthUsers ?? [];
       if (cachedAuthUsers.length > 0) {
         const idSet = new Set(ids);
         for (const u of cachedAuthUsers) {
-          if (idSet.has(u.id)) emailMap.set(u.id, { email: u.email, verified: u.verified });
+          if (idSet.has(u.id)) {
+            emailMap.set(u.id, { email: u.email, verified: u.verified, roles: u.roles });
+          }
         }
       } else {
         try {
@@ -310,6 +312,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
                 emailMap.set(usr.id, {
                   email: usr.email ?? null,
                   verified: !!usr.email_confirmed_at,
+                  roles: rolesFromAuthMetadata(usr.app_metadata),
                 });
               }
             }
@@ -320,7 +323,7 @@ export const adminListUsers = createServerFn({ method: "POST" })
         }
       }
       for (const id of ids) {
-        if (!emailMap.has(id)) emailMap.set(id, { email: null, verified: false });
+        if (!emailMap.has(id)) emailMap.set(id, { email: null, verified: false, roles: [] });
       }
     }
 
