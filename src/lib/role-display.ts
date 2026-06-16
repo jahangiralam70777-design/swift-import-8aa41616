@@ -6,6 +6,7 @@ export const ROLE_DISPLAY_NAMES: Record<string, string> = {
   super_admin: "Super Admin",
 };
 
-export function getRoleDisplayName(role: string): string {
+export function getRoleDisplayName(role: string | null | undefined): string {
+  if (!role) return "Unassigned";
   return ROLE_DISPLAY_NAMES[role] ?? role;
 }
