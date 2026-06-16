@@ -448,7 +448,7 @@ export const adminCreateStudent = createServerFn({ method: "POST" })
       // hook_before_user_created Auth Hook lets it through even when the
       // student-signup kill-switch is OFF. Only the service role can set
       // app_metadata — public /auth/v1/signup cannot forge this.
-      app_metadata: { created_by_admin: true },
+      app_metadata: { created_by_admin: true, role: "student", roles: ["student"] },
     });
     if (error) throw error;
     const newId = created.user?.id;
@@ -462,6 +462,10 @@ export const adminCreateStudent = createServerFn({ method: "POST" })
       bio: data.phone ? `Phone: ${data.phone}` : null,
     });
     if (pe) throw pe;
+    const { error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: newId, role: "student" }, { onConflict: "user_id,role" });
+    if (roleError) throw roleError;
     return { ok: true, id: newId };
   });
 

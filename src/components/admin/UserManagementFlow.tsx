@@ -1101,7 +1101,7 @@ export function UserManagementFlow() {
                 </thead>
                 <tbody className="divide-y divide-border/[0.35]">
                   {rows.map((u) => {
-                    const isAdmin = u.roles.includes("admin");
+                    const isAdmin = u.roles.includes("admin") || u.roles.includes("super_admin");
                     const isDeleted = !!u.deleted_at;
                     const displayStatus = isDeleted ? "deleted" : u.status;
                     const checked = selected.has(u.id);
@@ -1804,8 +1804,8 @@ function UserEditorDialog({
               student/moderator status.
             </p>
             <div className="grid gap-2">
-              {(["student", "moderator", "admin"] as const).map((r) => {
-                const isAdminRole = r === "admin";
+              {(["student", "moderator", "admin", "super_admin"] as const).map((r) => {
+                const isAdminRole = r === "admin" || r === "super_admin";
                 return (
                   <div
                     key={r}
@@ -1819,7 +1819,7 @@ function UserEditorDialog({
                       ) : (
                         <UserPlus className="h-4 w-4 text-emerald-400" />
                       )}
-                      {r}
+                      {getRoleDisplayName(r)}
                       {isAdminRole && (
                         <span className="ml-1 text-[10px] text-muted-foreground">(read-only)</span>
                       )}
