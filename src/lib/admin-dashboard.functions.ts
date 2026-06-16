@@ -283,6 +283,7 @@ export const adminControlCenter = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<AdminControlCenter> => {
     await assertPermission(context.supabase, context.userId, "view_analytics");
     const sb = context.supabase;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
