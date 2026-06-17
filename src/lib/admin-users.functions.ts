@@ -599,7 +599,7 @@ export const adminUserAnalytics = createServerFn({ method: "GET" })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (context.supabase as any).rpc("admin_user_analytics");
     if (error) throw error;
-    return data as {
+    const base = data as {
       total_users: number;
       deleted_users: number;
       active_24h: number;
@@ -612,6 +612,46 @@ export const adminUserAnalytics = createServerFn({ method: "GET" })
       usage_7d: number;
       usage_30d: number;
     };
+
+    // Override engagement-time metrics with heartbeat-driven study_sessions
+    // (active interaction only — idle / background time excluded).
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const now = Date.now();
+      const d24 = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+      const d7 = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const d30 = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: rows } = await supabaseAdmin
+        .from("study_sessions")
+        .select("duration_seconds,last_heartbeat_at")
+        .gte("last_heartbeat_at", d30);
+      let usage_24h = 0;
+      let usage_7d = 0;
+      let usage_30d = 0;
+      let totalDur = 0;
+      let n = 0;
+      for (const row of (rows ?? []) as Array<{
+        duration_seconds: number | null;
+        last_heartbeat_at: string | null;
+      }>) {
+        const dur = Number(row.duration_seconds ?? 0);
+        const ts = row.last_heartbeat_at ?? "";
+        if (dur <= 0) continue;
+        usage_30d += dur;
+        if (ts >= d7) usage_7d += dur;
+        if (ts >= d24) usage_24h += dur;
+        totalDur += dur;
+        n += 1;
+      }
+      base.usage_24h = usage_24h;
+      base.usage_7d = usage_7d;
+      base.usage_30d = usage_30d;
+      base.avg_session_seconds = n > 0 ? Math.round(totalDur / n) : 0;
+    } catch {
+      /* best-effort — fall back to RPC values */
+    }
+
+    return base;
   });
 
 export const adminTopUsers = createServerFn({ method: "POST" })
@@ -629,16 +669,44 @@ export const adminTopUsers = createServerFn({ method: "POST" })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rows, error } = await (context.supabase as any).rpc("admin_top_users", {
       _order: data.order,
-      _limit: data.limit,
+      _limit: Math.max(data.limit, 50),
     });
     if (error) throw error;
-    return (rows ?? []) as Array<{
+    const baseRows = (rows ?? []) as Array<{
       user_id: string;
       display_name: string;
       total_login_count: number;
       total_usage_seconds: number;
       last_login_at: string | null;
     }>;
+
+    // Recompute total_usage_seconds from study_sessions (active engagement),
+    // then re-rank because the RPC ordered by the legacy login-duration sum.
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: agg } = await supabaseAdmin
+        .from("study_sessions")
+        .select("user_id,duration_seconds");
+      const byUser = new Map<string, number>();
+      for (const r of (agg ?? []) as Array<{
+        user_id: string;
+        duration_seconds: number | null;
+      }>) {
+        byUser.set(r.user_id, (byUser.get(r.user_id) ?? 0) + Number(r.duration_seconds ?? 0));
+      }
+      for (const row of baseRows) {
+        row.total_usage_seconds = byUser.get(row.user_id) ?? 0;
+      }
+      baseRows.sort((a, b) =>
+        data.order === "least"
+          ? a.total_usage_seconds - b.total_usage_seconds
+          : b.total_usage_seconds - a.total_usage_seconds,
+      );
+    } catch {
+      /* best-effort */
+    }
+
+    return baseRows.slice(0, data.limit);
   });
 
 export const adminUserSessions = createServerFn({ method: "POST" })
