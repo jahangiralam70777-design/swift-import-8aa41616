@@ -40,7 +40,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 const ADMIN_VERIFIED_KEY = "admin-verified-at";
-const ADMIN_VERIFIED_TTL_MS = 60_000;
+const ADMIN_VERIFIED_TTL_MS = 5 * 60_000;
 
 function readRecentVerification(): boolean {
   if (typeof window === "undefined") return false;
@@ -56,99 +56,48 @@ function readRecentVerification(): boolean {
 
 function AdminGate({ children }: { children: React.ReactNode }) {
   const user = useAppStore((s) => s.user);
-  const sessionReady = useAppStore((s) => s.sessionReady);
-  const authLoading = useAppStore((s) => s.authLoading);
   const refreshAuth = useAppStore((s) => s.refreshAuth);
   const navigate = useNavigate();
   const verifyAdmin = useServerFn(verifyAdminAccess);
-  // Optimistically trust a recent verification from /admin/login so the
-  // dashboard paints immediately. Background re-verification still runs.
-  const [verified, setVerified] = useState<boolean>(() => readRecentVerification());
+
+  // Optimistic render: the synchronous beforeLoad gate already verified a
+  // local Supabase session exists, so paint the dashboard immediately and
+  // re-verify role in the background. Only redirect if the server returns
+  // a definitive non-admin response.
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     if (!user && hasLocalAuthSession()) void refreshAuth({ force: true });
   }, [refreshAuth, user]);
 
   useEffect(() => {
+    if (readRecentVerification()) return;
     let cancelled = false;
-    if (!sessionReady || authLoading) return;
     (async () => {
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (cancelled) return;
-      if (userErr || !userData.user) {
-        navigate({ to: "/admin/login", replace: true });
-        return;
-      }
-      const { data: sess } = await supabase.auth.getSession();
-      if (cancelled) return;
-      const hasToken = !!sess.session?.access_token;
-      if (!hasToken) {
-        navigate({ to: "/admin/login", replace: true });
-        return;
-      }
       try {
-        console.info("[admin-route] session user", {
-          id: userData.user.id,
-          email: userData.user.email,
-          appMetadata: userData.user.app_metadata,
-          userMetadata: userData.user.user_metadata,
-        });
         const result = (await verifyAdmin()) as VerifyAdminAccessResult;
         if (cancelled) return;
-        if (result?.degraded) {
-          console.warn("[admin-route] admin verification degraded", {
-            userId: userData.user.id,
-            reason: result.reason,
-          });
-          return;
-        }
+        if (result?.degraded) return;
         if (!result?.isAdmin) {
-          console.warn("[admin-route] verifyAdmin returned non-admin", {
-            userId: userData.user.id,
-            sources: result?.sources,
-          });
+          setBlocked(true);
           navigate({ to: "/admin/login", replace: true });
           return;
         }
-        console.info("[admin-route] admin verified", { userId: userData.user.id, role: result.role });
         try {
           window.sessionStorage.setItem(ADMIN_VERIFIED_KEY, String(Date.now()));
         } catch {
-          /* ignore storage errors */
+          /* ignore */
         }
-        setVerified(true);
       } catch (error) {
-        if (cancelled) return;
-        console.warn("[admin-route] admin verification request failed", {
-          userId: userData.user.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        console.warn("[admin-route] verifyAdmin failed", error);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [authLoading, sessionReady, user?.id, navigate, verifyAdmin]);
+  }, [navigate, verifyAdmin]);
 
-  if (!verified) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        aria-busy="true"
-        className="flex min-h-[60dvh] flex-1 items-center justify-center"
-      >
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <span
-            aria-hidden
-            className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--neon-purple)]/30 border-t-[var(--neon-purple)]"
-          />
-          <p className="text-sm font-medium tracking-wide">Loading admin dashboard…</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (blocked) return null;
   return <>{children}</>;
 }
 
