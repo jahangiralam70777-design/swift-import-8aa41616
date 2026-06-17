@@ -291,21 +291,50 @@ export const adminListUsers = createServerFn({ method: "POST" })
       }
     }
 
-    const rows = (profiles ?? []).map((p: { id: string; display_name: string | null }) => {
-      const auth = emailMap.get(p.id);
-      const fallback = auth?.email ?? `${p.id.slice(0, 8)}…`;
-      const roles = rolesMap.get(p.id) ?? [];
-      const authRoles = auth?.roles ?? [];
-      const effectiveRoles = roles.length > 0 ? roles : authRoles;
-      return {
-        ...p,
-        display_name: p.display_name ?? fallback,
-        roles: effectiveRoles,
-        roleDisplays: roleDisplayMap.get(p.id) ?? effectiveRoles,
-        email: auth?.email ?? null,
-        email_verified: auth?.verified ?? false,
-      };
-    });
+    // Compute ACTIVE engagement time per user from study_sessions
+    // (heartbeat-driven, idle/background time excluded). This overrides the
+    // legacy profiles.total_usage_seconds, which was login→logout duration
+    // and inflated by users leaving the tab open.
+    const usageByUser = new Map<string, number>();
+    if (ids.length) {
+      try {
+        const { data: usageRows } = await supabaseAdmin
+          .from("study_sessions")
+          .select("user_id,duration_seconds")
+          .in("user_id", ids);
+        for (const row of (usageRows ?? []) as Array<{
+          user_id: string;
+          duration_seconds: number | null;
+        }>) {
+          usageByUser.set(
+            row.user_id,
+            (usageByUser.get(row.user_id) ?? 0) + Number(row.duration_seconds ?? 0),
+          );
+        }
+      } catch {
+        /* best-effort; fall back to profile column */
+      }
+    }
+
+    const rows = (profiles ?? []).map(
+      (p: { id: string; display_name: string | null; total_usage_seconds?: number | null }) => {
+        const auth = emailMap.get(p.id);
+        const fallback = auth?.email ?? `${p.id.slice(0, 8)}…`;
+        const roles = rolesMap.get(p.id) ?? [];
+        const authRoles = auth?.roles ?? [];
+        const effectiveRoles = roles.length > 0 ? roles : authRoles;
+        return {
+          ...p,
+          display_name: p.display_name ?? fallback,
+          // Active engagement time (heartbeat-derived), not login duration.
+          total_usage_seconds: usageByUser.get(p.id) ?? 0,
+          roles: effectiveRoles,
+          roleDisplays: roleDisplayMap.get(p.id) ?? effectiveRoles,
+          email: auth?.email ?? null,
+          email_verified: auth?.verified ?? false,
+        };
+      },
+    );
 
     return { rows, count: count ?? 0, page: data.page, pageSize: data.pageSize };
   });
