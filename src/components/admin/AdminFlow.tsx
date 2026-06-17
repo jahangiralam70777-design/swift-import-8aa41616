@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAppStore } from "@/stores/app-store";
 import { FloatingQuickActions } from "@/components/admin/FloatingQuickActions";
@@ -104,26 +104,41 @@ export function AdminFlow() {
   const [periodDays, setPeriodDays] = useState<7 | 30 | 90>(30);
   const [participationScope, setParticipationScope] = useState<"all" | "month">("month");
 
+  // Shared options: keep previous data instantly visible on refetch / param
+  // change, dedupe rapid mounts via staleTime, and skip the focus-refetch
+  // storm that hides cached data behind loading skeletons.
+  const sharedOpts = {
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 15_000,
+    gcTime: 10 * 60_000,
+  } as const;
+
   const cc = useQuery({
     queryKey: ["admin-control-center"],
     queryFn: () => ccFn(),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    ...sharedOpts,
   });
   const po = useQuery({
     queryKey: ["admin-premium-overview", periodDays, participationScope],
     queryFn: () =>
       poFn({ data: { period_days: periodDays, participation_scope: participationScope } }),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    ...sharedOpts,
   });
   const snap = useQuery({
     queryKey: ["admin-dashboard-snapshot"],
     queryFn: () => snapFn(),
-    refetchInterval: 20_000,
+    refetchInterval: 30_000,
+    ...sharedOpts,
   });
   const badge = useQuery({
     queryKey: ["admin-notifications-badge"],
     queryFn: () => badgeFn(),
-    refetchInterval: 20_000,
+    refetchInterval: 30_000,
+    ...sharedOpts,
   });
 
   return (

@@ -10,6 +10,12 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useAppStore, hasLocalAuthSession } from "@/stores/app-store";
 import { supabase } from "@/integrations/supabase/client";
 import { verifyAdminAccess, type VerifyAdminAccessResult } from "@/lib/admin-verify.functions";
+import {
+  adminControlCenter,
+  adminDashboardSnapshot,
+  adminPremiumOverview,
+  adminNotificationsBadge,
+} from "@/lib/admin-dashboard.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/admin")({
@@ -24,6 +30,36 @@ export const Route = createFileRoute("/admin")({
     if (!hasLocalAuthSession()) {
       throw redirect({ to: "/admin/login" });
     }
+  },
+  loader: ({ context, location }) => {
+    if (typeof window === "undefined") return;
+    if (location.pathname === "/admin/login") return;
+    if (!hasLocalAuthSession()) return;
+    // Warm the dashboard cache in parallel the moment we enter /admin.
+    // ensureQueryData dedupes if the user lands directly on /admin and the
+    // component then subscribes via useQuery with the same key.
+    const qc = context.queryClient;
+    void qc.prefetchQuery({
+      queryKey: ["admin-control-center"],
+      queryFn: () => adminControlCenter(),
+      staleTime: 15_000,
+    });
+    void qc.prefetchQuery({
+      queryKey: ["admin-premium-overview", 30, "month"],
+      queryFn: () =>
+        adminPremiumOverview({ data: { period_days: 30, participation_scope: "month" } }),
+      staleTime: 15_000,
+    });
+    void qc.prefetchQuery({
+      queryKey: ["admin-dashboard-snapshot"],
+      queryFn: () => adminDashboardSnapshot(),
+      staleTime: 15_000,
+    });
+    void qc.prefetchQuery({
+      queryKey: ["admin-notifications-badge"],
+      queryFn: () => adminNotificationsBadge(),
+      staleTime: 15_000,
+    });
   },
   component: AdminLayout,
   head: () => ({
